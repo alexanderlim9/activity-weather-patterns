@@ -1,0 +1,44 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Install the fitbitr package
+```{r}
+devtools::install_github("avsecz/fitbitr")
+devtools::install_github("r-lib/httr#485")
+install.packages("jsonlite")
+```
+
+
+```{r}
+library("fitbitr")
+library("httr")  
+library("jsonlite")
+token <- get_fitbit_token()
+```
+
+```{r}
+# pull sleep data from November 1-19
+req <- fitbit_GET("1/user/4QXD3G/sleep/date/2017-11-01/2017-11-19.json", token = token )
+
+# output <- toString(fitbit_parse(req))
+output <- toString(toJSON(fitbit_parse(req)))
+output <- fromJSON(output, simplifyDataFrame = TRUE)
+# output$sleep$dateOfSleep
+
+# create time series model
+ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1) 
+plot(ts)
+
+writeLines(paste("On", output$sleep$dateOfSleep, "you slept for", output$sleep$minutesAsleep, "minutes."))
+# write(toJSON(output), "sleep.json")
+```
+
+
+
+
+
+
+
+
