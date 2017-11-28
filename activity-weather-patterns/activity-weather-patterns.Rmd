@@ -8,6 +8,10 @@ Install the fitbitr package
 devtools::install_github("avsecz/fitbitr")
 devtools::install_github("r-lib/httr#485")
 install.packages("jsonlite")
+install.packages("mongolite")
+install.packages("lubridate")
+install.packages("RCurl")
+install.packages("XML")
 ```
 
 
@@ -15,26 +19,111 @@ install.packages("jsonlite")
 library("fitbitr")
 library("httr")  
 library("jsonlite")
+library("mongolite")
+library("lubridate")
+library("RCurl")
+library("XML")
 token <- get_fitbit_token()
 ```
 
+Size of API requests is limited. Call the API for increments by 3 month spans instead.
 ```{r}
-# pull sleep data from November 1-19
-req <- fitbit_GET("1/user/4QXD3G/sleep/date/2017-11-01/2017-11-19.json", token = token )
+# pull sleep data from January 1-April 11
+# req <- fitbit_GET("1/user/4QXD3G/sleep/date/2017-01-01/2017-04-11.json", token = token )
+req <- fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-11-25.json", token = token )
 
-# output <- toString(fitbit_parse(req))
-output <- toString(toJSON(fitbit_parse(req)))
+output <- toJSON(fitbit_parse(req))
+
 output <- fromJSON(output, simplifyDataFrame = TRUE)
-# output$sleep$dateOfSleep
+# output <- fromJSON(output)
+data <- output$`activities-steps`
+data$dateTime <- unlist(data$dateTime)
+colnames(data)[2] <- "stepCount"
+data$stepCount <- unlist(data$stepCount)
+data
 
 # create time series model
-ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1) 
-plot(ts)
-
-writeLines(paste("On", output$sleep$dateOfSleep, "you slept for", output$sleep$minutesAsleep, "minutes."))
-# write(toJSON(output), "sleep.json")
+# ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1) 
+# plot(ts)
 ```
 
+```{r}
+data$dateTime <- as.Date(data$dateTime, "%Y-%m-%d")
+data$stepCount <- as.numeric(data$stepCount)
+```
+
+Impute additional date information
+```{r}
+day <- weekdays(data$dateTime)
+week <- week(data$dateTime)
+data <- cbind(data, day, week)
+data
+```
+
+Scrape weather data from https://www.wunderground.com/
+```{r}
+weather2016 <-
+  RCurl::getURL(
+  "https://www.wunderground.com/history/airport/KBOS/2016/6/23/CustomHistory.html?dayend=22&monthend=6&yearend=2017&req_city=&req_state=&req_statename=&reqdb.zip=&reqdb.magic=&reqdb.wmo="
+  )
+  tc <- textConnection(weather2016)
+  weather2016 <- readLines(tc)
+  close(tc)
+  
+  pagetree <- htmlTreeParse(weather2016, useInternalNodes = TRUE)
+
+  # dates from 6/23/16 - 6/22/17
+  weatherDate <-
+  unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[1]/a", xmlValue))
+  
+  weatherTempHi <-
+  unlist(xpathApply(
+  pagetree,
+  "//*[@id='obsTable']/tbody/tr/td[2]/span",
+  xmlValue
+  ))
+  
+  weatherTempLo <-
+  unlist(xpathApply(
+  pagetree,
+  "//*[@id='obsTable']/tbody/tr/td[4]/span",
+  xmlValue
+  ))
+  
+  weatherHumidity <-
+  unlist(xpathApply(
+  pagetree,
+  "//*[@id='obsTable']/tbody/tr/td[9]/span",
+  xmlValue
+  ))
+  
+  weatherWind <-
+  unlist(xpathApply(
+  pagetree,
+  "//*[@id='obsTable']/tbody/tr/td[18]/span",
+  xmlValue
+  ))
+  
+  weatherPrecip <-
+  unlist(xpathApply(
+  pagetree,
+  "//*[@id='obsTable']/tbody/tr/td[20]/span",
+  xmlValue
+  ))
+  
+  weatherFrame <-
+  as.data.frame(cbind(
+  as.numeric(weatherDate),
+  as.numeric(weatherTempHi),
+  as.numeric(weatherTempLo),
+  as.numeric(weatherHumidity),
+  as.numeric(weatherWind),
+  as.numeric(weatherPrecip)
+  ))
+  colnames(weatherFrame) <-
+  c("date", "tempHi", "tempLo", "avgHumidity", "avgWind", "precip")
+  weatherFrame
+```
 
 
 
