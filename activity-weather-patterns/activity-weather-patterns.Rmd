@@ -30,7 +30,9 @@ Size of API requests is limited. Call the API for increments by 3 month spans in
 ```{r}
 # pull sleep data from January 1-April 11
 # req <- fitbit_GET("1/user/4QXD3G/sleep/date/2017-01-01/2017-04-11.json", token = token )
-req <- fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-11-25.json", token = token )
+req <-
+fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-11-25.json",
+token = token)
 
 output <- toJSON(fitbit_parse(req))
 
@@ -43,7 +45,7 @@ data$stepCount <- unlist(data$stepCount)
 data
 
 # create time series model
-# ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1) 
+# ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1)
 # plot(ts)
 ```
 
@@ -71,7 +73,7 @@ weather2016 <-
   close(tc)
   
   pagetree <- htmlTreeParse(weather2016, useInternalNodes = TRUE)
-
+  
   # dates from 6/23/16 - 6/22/17
   weatherDate <-
   unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[1]/a", xmlValue))
@@ -111,18 +113,59 @@ weather2016 <-
   xmlValue
   ))
   
+  weatherType <-
+  unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[21]", xmlValue))
+  
+  # cleaning
+  weatherType <-
+  weatherType[grepl("\n", weatherType)] # remove empty strings
+  weatherType <- gsub("\n", "", weatherType)
+  weatherType <- gsub("\t", "", weatherType)
+  
+  weatherType
+  weatherRain <- grepl("Rain", weatherType)
+  weatherThunder <- grepl("Thunderstorm", weatherType)
+  weatherFog <- grepl("Fog", weatherType)
+  weatherSnow <- grepl("Snow", weatherType)
+
   weatherFrame <-
-  as.data.frame(cbind(
-  as.numeric(weatherDate),
-  as.numeric(weatherTempHi),
-  as.numeric(weatherTempLo),
-  as.numeric(weatherHumidity),
-  as.numeric(weatherWind),
-  as.numeric(weatherPrecip)
-  ))
+  as.data.frame(
+  cbind(
+  weatherDate,
+  weatherTempHi,
+  weatherTempLo,
+  weatherHumidity,
+  weatherWind,
+  weatherPrecip,
+  weatherType,
+  weatherRain,
+  weatherThunder,
+  weatherFog,
+  weatherSnow
+  )
+  )
+  
+  
+  weatherFrame[, 1:6] <- sapply(weatherFrame[, 1:6], as.numeric)
+  weatherFrame[, 7] <- sapply(weatherFrame[, 7], as.character)
+  weatherFrame[, 8:11] <- sapply(weatherFrame[, 8:11], as.logical)
+  
   colnames(weatherFrame) <-
-  c("date", "tempHi", "tempLo", "avgHumidity", "avgWind", "precip")
+  c("date",
+  "tempHi",
+  "tempLo",
+  "avgHumidity",
+  "avgWind",
+  "precip",
+  "type",
+  "rain",
+  "thunder",
+  "fog",
+  "snow")
   weatherFrame
+  
+  plot(weatherFrame$tempHi)
+  
 ```
 
 
