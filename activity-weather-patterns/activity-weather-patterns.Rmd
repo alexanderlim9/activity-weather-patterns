@@ -2,8 +2,9 @@
 title: "R Notebook"
 output: html_notebook
 ---
+Objective: Determine trends in activity patterns with respect to both weather and routine to predict and inform/improve future behavior.
 
-Install the fitbitr package
+Install packages.
 ```{r}
 devtools::install_github("avsecz/fitbitr")
 devtools::install_github("r-lib/httr#485")
@@ -12,9 +13,9 @@ install.packages("mongolite")
 install.packages("lubridate")
 install.packages("RCurl")
 install.packages("XML")
+install.packages("ggplot2")
 ```
-
-
+Load packages.
 ```{r}
 library("fitbitr")
 library("httr")  
@@ -23,105 +24,134 @@ library("mongolite")
 library("lubridate")
 library("RCurl")
 library("XML")
+library("ggplot2")
 token <- get_fitbit_token()
 ```
 
-Size of API requests is limited. Call the API for increments by 3 month spans instead.
+Pull raw activity data (JSON) from Fitbit API from 2016-06-23 (when I first began wearing the fitbit) to present.
 ```{r}
-# pull sleep data from January 1-April 11
-# req <- fitbit_GET("1/user/4QXD3G/sleep/date/2017-01-01/2017-04-11.json", token = token )
 req <-
-fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-11-25.json",
+fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-12-02.json",
 token = token)
 
 output <- toJSON(fitbit_parse(req))
-
+output
+# ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1)
+```
+Convert JSON to data frame.
+```{r}
 output <- fromJSON(output, simplifyDataFrame = TRUE)
-# output <- fromJSON(output)
+output
+```
+Clean activity data. Unlist JSON elements into columns. Convert data types and rename value column.
+```{r}
 data <- output$`activities-steps`
 data$dateTime <- unlist(data$dateTime)
-colnames(data)[2] <- "stepCount"
 data$stepCount <- unlist(data$stepCount)
 data
 
-# create time series model
-# ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1)
-# plot(ts)
-```
-
-```{r}
+colnames(data)[2] <- "stepCount"
 data$dateTime <- as.Date(data$dateTime, "%Y-%m-%d")
-data$stepCount <- as.numeric(data$stepCount)
+data$stepCount <- as.integer(data$stepCount)
 ```
 
-Impute additional date information
+Add additional date information features for day of the week and number week of the year.
 ```{r}
 day <- weekdays(data$dateTime)
 week <- week(data$dateTime)
 data <- cbind(data, day, week)
 data
 ```
-
-Scrape weather data from https://www.wunderground.com/
+Histogram representing distribution of daily step counts. The histogram shows a normal distribution.
 ```{r}
-weather2016 <-
-  RCurl::getURL(
-  "https://www.wunderground.com/history/airport/KBOS/2016/6/23/CustomHistory.html?dayend=22&monthend=6&yearend=2017&req_city=&req_state=&req_statename=&reqdb.zip=&reqdb.magic=&reqdb.wmo="
+qplot(data$stepCount,
+      geom="histogram",
+      binwidth=500)
+```
+
+Create function to scrape weather data from https://www.wunderground.com/ for a given time period.
+(The source is unable to provide history for very large periods of time and therefore must be retrieved in batches).
+```{r}
+getUrl <- function (date1, date2) {
+  # Assemble proper url to retrieve weather data from webpage.
+  # Arguments: date1, date2 are strings representing the start and end date in the format 'YYYY/mm/dd'
+  # Returns: the customized url
+
+  URL <-
+  paste(
+  "https://www.wunderground.com/history/airport/KBOS/",
+  date1,
+  "/CustomHistory.html?dayend=",
+  substr(date2, 9, 10),
+  "&monthend=",
+  substr(date2, 6, 7),
+  "&yearend=",
+  substr(date2, 1, 4),
+  "&req_city=&req_state=&req_statename=&reqdb.zip=&reqdb.magic=&reqdb.wmo=",
+  sep = ""
   )
-  tc <- textConnection(weather2016)
-  weather2016 <- readLines(tc)
+  return (URL)
+}
+
+fetchWeather <- function(startDate, endDate) {
+  # Retrieve weather data for a given date range from webpage.
+  # Arguments: startDate, endDate are strings representing the start and end date in the format 'YYYY/mm/dd'
+  # Returns: a data frame containing the date, temperature, humidity, wind, precipitation, and types of weather
+
+  webpage <-
+    RCurl::getURL(getUrl(startDate, endDate))
+  tc <- textConnection(webpage)
+  webpage <- readLines(tc)
   close(tc)
-  
-  pagetree <- htmlTreeParse(weather2016, useInternalNodes = TRUE)
-  
-  # dates from 6/23/16 - 6/22/17
+
+  pagetree <- htmlTreeParse(webpage, useInternalNodes = TRUE)
   weatherDate <-
   unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[1]/a", xmlValue))
-  
+
   weatherTempHi <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[2]/span",
   xmlValue
   ))
-  
+
   weatherTempLo <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[4]/span",
   xmlValue
   ))
-  
+
   weatherHumidity <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[9]/span",
   xmlValue
   ))
-  
+
   weatherWind <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[18]/span",
   xmlValue
   ))
-  
+
   weatherPrecip <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[20]/span",
   xmlValue
   ))
-  
+
   weatherType <-
   unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[21]", xmlValue))
-  
+
   # cleaning
   weatherType <-
   weatherType[grepl("\n", weatherType)] # remove empty strings
   weatherType <- gsub("\n", "", weatherType)
   weatherType <- gsub("\t", "", weatherType)
-  
+
   weatherType
   weatherRain <- grepl("Rain", weatherType)
   weatherThunder <- grepl("Thunderstorm", weatherType)
@@ -129,8 +159,7 @@ weather2016 <-
   weatherSnow <- grepl("Snow", weatherType)
 
   weatherFrame <-
-  as.data.frame(
-  cbind(
+  data.frame(
   weatherDate,
   weatherTempHi,
   weatherTempLo,
@@ -141,15 +170,11 @@ weather2016 <-
   weatherRain,
   weatherThunder,
   weatherFog,
-  weatherSnow
-  )
-  )
-  
-  
+  weatherSnow,
+  stringsAsFactors = FALSE)
+
   weatherFrame[, 1:6] <- sapply(weatherFrame[, 1:6], as.numeric)
-  weatherFrame[, 7] <- sapply(weatherFrame[, 7], as.character)
-  weatherFrame[, 8:11] <- sapply(weatherFrame[, 8:11], as.logical)
-  
+
   colnames(weatherFrame) <-
   c("date",
   "tempHi",
@@ -162,10 +187,56 @@ weather2016 <-
   "thunder",
   "fog",
   "snow")
-  weatherFrame
-  
-  plot(weatherFrame$tempHi)
-  
+
+  return(weatherFrame)
+}
+
+weather2016 <- fetchWeather("2016/06/23", "2017/06/22")
+weather2017 <- fetchWeather("2017/06/23", "2017/12/02")
+weatherTotal <- rbind(weather2016, weather2017)
+weatherTotal
+```
+
+Only the precipitation column contains missing values.
+```{r}
+sapply(weatherTotal[,1:11], function(x) length(x[which(is.na(x) == TRUE)]))
+```
+
+Exploratory visuals for precipitation.
+```{r}
+# precipitation over a one year period
+plot(weather2016$precip, xlab="days since 2016/06/23", ylab="precipitation (in)")
+# distribution of precipitation amounts
+qplot(weatherTotal$precip,
+      geom="histogram")
+# distribution of non-zero precipitation amounts
+qplot(weatherTotal$precip[which(weatherTotal$precip>0)],
+      geom="histogram")
+```
+
+Create regression model to impute missing precipitation data.
+```{r}
+# pred <- lm(
+#   weatherTotal$precip ~
+#   weatherDate +
+#   weatherTotal$weatherTempHi +
+#   weatherTotal$weatherTempLo +
+#   weatherTotal$weatherHumidity +
+#   weatherTotal$weatherWind +
+#   weatherTotal$weatherType +
+#   weatherTotal$weatherRain +
+#   weatherTotal$weatherThunder +
+#   weatherTotal$weatherFog +
+#   weatherTotal$weatherSnow,
+#   df
+#   )
+# 
+# 
+# 
+# pred <- lm(Salary ~ Exp + Level, df)
+# 
+# summary(pred)
+
 ```
 
 
