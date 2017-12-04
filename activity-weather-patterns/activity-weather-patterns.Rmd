@@ -14,6 +14,8 @@ install.packages("lubridate")
 install.packages("RCurl")
 install.packages("XML")
 install.packages("ggplot2")
+install.packages("Metrics")
+
 ```
 Load packages.
 ```{r}
@@ -25,6 +27,7 @@ library("lubridate")
 library("RCurl")
 library("XML")
 library("ggplot2")
+library("Metrics")
 token <- get_fitbit_token()
 ```
 
@@ -197,9 +200,15 @@ weatherTotal <- rbind(weather2016, weather2017)
 weatherTotal
 ```
 
-Only the precipitation column contains missing values.
+Merge activity data frame with weather data frame.
 ```{r}
-sapply(weatherTotal[,1:11], function(x) length(x[which(is.na(x) == TRUE)]))
+data <- cbind(data, weatherTotal[,2:11])
+data
+```
+
+Check for missing values. Only the precipitation column contains missing values.
+```{r}
+sapply(data[,1:14], function(x) length(x[which(is.na(x) == TRUE)]))
 ```
 
 Exploratory visuals for precipitation.
@@ -214,29 +223,184 @@ qplot(weatherTotal$precip[which(weatherTotal$precip>0)],
       geom="histogram")
 ```
 
+Partition data into training and validation sets.
+```{r}
+set.seed(200)
+sampleRows <- sample.int(nrow(data), size = nrow(data)*.75)
+sampleRows
+
+trainingData <- data[sampleRows,]
+trainingData <- trainingData[complete.cases(trainingData),]
+trainingData
+
+validationData <- data[-sampleRows,]
+validationData <- validationData[complete.cases(validationData),]
+validationData
+```
+
 Create regression model to impute missing precipitation data.
 ```{r}
-# pred <- lm(
-#   weatherTotal$precip ~
-#   weatherDate +
-#   weatherTotal$weatherTempHi +
-#   weatherTotal$weatherTempLo +
-#   weatherTotal$weatherHumidity +
-#   weatherTotal$weatherWind +
-#   weatherTotal$weatherType +
-#   weatherTotal$weatherRain +
-#   weatherTotal$weatherThunder +
-#   weatherTotal$weatherFog +
-#   weatherTotal$weatherSnow,
-#   df
-#   )
-# 
-# 
-# 
-# pred <- lm(Salary ~ Exp + Level, df)
-# 
-# summary(pred)
+# plot(data$precip, data$avgHumidity)
+# plot(data$precip, data$avgWind)
 
+pred <- lm(precip ~
+             week +
+             tempHi +
+             tempLo +
+             avgHumidity +
+             avgWind +
+             type +
+             rain +
+             thunder +
+             fog +
+             snow,
+             data = trainingData)
+summary(pred)
+```
+Backfit the model to remove statistically insignificant variables.
+```{r}
+pred <- lm(precip ~
+             tempHi +
+             tempLo +
+             avgHumidity +
+             avgWind +
+             type,
+             data = trainingData)
+summary(pred)
+```
+
+```{r}
+pred <- lm(precip ~
+             avgHumidity +
+             avgWind +
+             type,
+             data = trainingData)
+summary(pred)
+```
+
+```{r}
+pred <- lm(precip ~
+             avgHumidity +
+             avgWind,
+             data = trainingData)
+summary(pred)
+```
+
+Determine accuracy of imputation model for precipitation to be 54.26%. 
+While the model is not statistically powerful with a low adjusted r-squared value .241, it serves the purpose of imputing missing precipation values.
+```{r}
+predAccuracy <- round(predict(pred, trainingData, type="response"))
+accuracy(predAccuracy, validationData$precip)
+```
+
+Impute missing precipitation value.
+```{r}
+# pred$coefficients
+
+imputePrecip <- function(r) {
+  # if(r[9])
+  precipPred <- (pred$coefficients[[1]] +
+  (pred$coefficients[[2]] * r[7]) + (pred$coefficients[[3]] * r[8]))
+  return(round(max(precipPred, 0), 2))
+}
+
+isWeatherEvent <- function(x) {# takes in a character for "type"
+  return(
+  x == "Rain" |
+  x == "Thunderstorm" |
+  x == "Fog" |
+  x == "Snow" |
+  x == "Fog,Rain" |
+  x == "Rain,Thunderstorm" |
+  x == "Fog,Rain,Thunderstorm" |
+  x == "Fog,Rain,Snow" |
+  x == "Fog,Snow" |
+  x == "Rain,Snow" |
+  x == "Rain,Snow,Thunderstorm"
+  )
+}
+
+
+# imputePrecip <- function(p) {
+#   precipPred <- (pred$coefficients[[1]] +
+#   (pred$coefficients[[2]] * data[row(p)[1], 7]) + (pred$coefficients[[3]] * data[row(p)[1], 8]))
+#   # return(max(precipPred, 0))
+#   return (data[row(p),])
+# }
+
+incompleteCases <- data[!complete.cases(data),]
+
+
+
+data
+# zeroPrecip
+# zeroPrecip$precip <- 0.00
+
+sapply(data[,1:14], function(x) length(x[which(is.na(x) == TRUE)]))
+
+# z$color<-y[match(z$letter, y$letter),2]
+# data$precip <- sapply(data$precip, function(x) if(is.na(x)) {
+#   x <-zeroPrecip[match(data$dateTime, zeroPrecip$dateTime),zeroPrecip$precip] }
+# else {
+#   data$precip
+# }
+# data
+
+# z$color<-y[match(z$letter, y$letter),2]
+
+
+
+######## DOESN'T WORK RN, TO DELETE
+# data$precip <- sapply(data$precip, function(x) if(is.na(x) & match(data$dateTime, zeroPrecip$dateTime)) {
+#   x <-zeroPrecip[match(data$dateTime, zeroPrecip$dateTime),zeroPrecip$precip] 
+#   }
+# else {
+#   x <- data$precip
+# })
+######## 
+
+
+incompleteCases
+
+######## DELETED THE PRECIP COLUMN?, TO DELETE
+# data[,9] <- sapply(data[,9], function(x) if (is.na(x) & !isWeatherEvent(data[,10])) {
+#   x <- 0.00
+# })
+######## 
+
+
+
+##### REFRESH THE PRECIP COLUMNS
+data$precip <- weatherTotal$precip
+data
+
+# imputePrecip(incompleteCases[1,])
+# imputePrecip(incompleteCases[2,])
+# imputePrecip(incompleteCases[3,])
+data$precip
+
+data
+
+# WORKS GOOD
+# for data points where no weather events were recorded, impute precipitation of 0.00 if precipitation is NA
+data[which(!isWeatherEvent(data$type)),][is.na(data[which(!isWeatherEvent(data$type)),]$precip),]$precip <- 0.00
+
+
+# for data points where a weather event was recorded, impute precipitation
+imputedPrecip <- sapply(1:34, function(x) imputePrecip(incompleteCases[x,])[[1]])
+data[is.na(data$precip),]$precip <- imputedPrecip
+
+data
+
+# data[which(isWeatherEvent(data$type)),][is.na(data[which(isWeatherEvent(data$type)),]$precip),]
+
+
+# data[which(!isWeatherEvent(data$type)),][is.na(data[which(!isWeatherEvent(data$type)),]$precip),]
+
+
+incompleteCases <- data[is.na(data$precip),]
+incompleteCases
+# sapply(1:56, function(x) imputePrecip(incompleteCases[x,])[[1]])
 ```
 
 
