@@ -240,8 +240,8 @@ validationData
 
 Create regression model to impute missing precipitation data.
 ```{r}
-# plot(data$precip, data$avgHumidity)
-# plot(data$precip, data$avgWind)
+plot(data$precip, data$avgHumidity)
+plot(data$precip, data$avgWind)
 
 pred <- lm(precip ~
              week +
@@ -295,10 +295,7 @@ accuracy(predAccuracy, validationData$precip)
 
 Impute missing precipitation value.
 ```{r}
-# pred$coefficients
-
 imputePrecip <- function(r) {
-  # if(r[9])
   precipPred <- (pred$coefficients[[1]] +
   (pred$coefficients[[2]] * r[7]) + (pred$coefficients[[3]] * r[8]))
   return(round(max(precipPred, 0), 2))
@@ -320,87 +317,16 @@ isWeatherEvent <- function(x) {# takes in a character for "type"
   )
 }
 
-
-# imputePrecip <- function(p) {
-#   precipPred <- (pred$coefficients[[1]] +
-#   (pred$coefficients[[2]] * data[row(p)[1], 7]) + (pred$coefficients[[3]] * data[row(p)[1], 8]))
-#   # return(max(precipPred, 0))
-#   return (data[row(p),])
-# }
-
-incompleteCases <- data[!complete.cases(data),]
-
-
-
-data
-# zeroPrecip
-# zeroPrecip$precip <- 0.00
-
-sapply(data[,1:14], function(x) length(x[which(is.na(x) == TRUE)]))
-
-# z$color<-y[match(z$letter, y$letter),2]
-# data$precip <- sapply(data$precip, function(x) if(is.na(x)) {
-#   x <-zeroPrecip[match(data$dateTime, zeroPrecip$dateTime),zeroPrecip$precip] }
-# else {
-#   data$precip
-# }
-# data
-
-# z$color<-y[match(z$letter, y$letter),2]
-
-
-
-######## DOESN'T WORK RN, TO DELETE
-# data$precip <- sapply(data$precip, function(x) if(is.na(x) & match(data$dateTime, zeroPrecip$dateTime)) {
-#   x <-zeroPrecip[match(data$dateTime, zeroPrecip$dateTime),zeroPrecip$precip] 
-#   }
-# else {
-#   x <- data$precip
-# })
-######## 
-
-
-incompleteCases
-
-######## DELETED THE PRECIP COLUMN?, TO DELETE
-# data[,9] <- sapply(data[,9], function(x) if (is.na(x) & !isWeatherEvent(data[,10])) {
-#   x <- 0.00
-# })
-######## 
-
-
-
-##### REFRESH THE PRECIP COLUMNS
-data$precip <- weatherTotal$precip
-data
-
-# imputePrecip(incompleteCases[1,])
-# imputePrecip(incompleteCases[2,])
-# imputePrecip(incompleteCases[3,])
-data$precip
-
-data
-
-# WORKS GOOD
 # for data points where no weather events were recorded, impute precipitation of 0.00 if precipitation is NA
 data[which(!isWeatherEvent(data$type)),][is.na(data[which(!isWeatherEvent(data$type)),]$precip),]$precip <- 0.00
 
-
 # for data points where a weather event was recorded, impute precipitation
+incompleteCases <- data[is.na(data$precip),] 
 imputedPrecip <- sapply(1:34, function(x) imputePrecip(incompleteCases[x,])[[1]])
 data[is.na(data$precip),]$precip <- imputedPrecip
 
+sapply(data[,1:14], function(x) length(x[which(is.na(x) == TRUE)])) # confirm that there are no remaining missing values
 data
-
-# data[which(isWeatherEvent(data$type)),][is.na(data[which(isWeatherEvent(data$type)),]$precip),]
-
-
-# data[which(!isWeatherEvent(data$type)),][is.na(data[which(!isWeatherEvent(data$type)),]$precip),]
-
-
-incompleteCases <- data[is.na(data$precip),]
-incompleteCases
-# sapply(1:56, function(x) imputePrecip(incompleteCases[x,])[[1]])
 ```
 
 
