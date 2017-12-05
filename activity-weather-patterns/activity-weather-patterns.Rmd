@@ -15,7 +15,7 @@ install.packages("RCurl")
 install.packages("XML")
 install.packages("ggplot2")
 install.packages("Metrics")
-
+install.packages("TTR")
 ```
 Load packages.
 ```{r}
@@ -28,18 +28,15 @@ library("RCurl")
 library("XML")
 library("ggplot2")
 library("Metrics")
+library("TTR")
 token <- get_fitbit_token()
 ```
 
-Pull raw activity data (JSON) from Fitbit API from 2016-06-23 (when I first began wearing the fitbit) to present.
+Pull raw activity data (JSON) from Fitbit API from 2016-06-23 (when I first began wearing my fitbit) to present (2017-12-02).
 ```{r}
-req <-
-fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-12-02.json",
-token = token)
-
+req <- fitbit_GET("1/user/4QXD3G/activities/steps/date/2016-06-23/2017-12-02.json", token = token)
 output <- toJSON(fitbit_parse(req))
 output
-# ts <- ts(rev(output$sleep$minutesAsleep), start=c(1, 1), end=c(19, 1), frequency=1)
 ```
 Convert JSON to data frame.
 ```{r}
@@ -58,28 +55,28 @@ data$dateTime <- as.Date(data$dateTime, "%Y-%m-%d")
 data$stepCount <- as.integer(data$stepCount)
 ```
 
-Add additional date information features for day of the week and number week of the year.
+Add additional date features for day of the week and number week of the year.
 ```{r}
 day <- weekdays(data$dateTime)
 week <- week(data$dateTime)
 data <- cbind(data, day, week)
 data
 ```
-Histogram representing distribution of daily step counts. The histogram shows a normal distribution.
+Histogram representing distribution of daily step counts. The histogram shows a bell curve with a relatively normal distribution.
 ```{r}
 qplot(data$stepCount,
-      geom="histogram",
-      binwidth=500)
+      geom = "histogram",
+      binwidth = 500)
 ```
 
-Create function to scrape weather data from https://www.wunderground.com/ for a given time period.
+Create a function to scrape weather data from https://www.wunderground.com/ for a given time period.
 (The source is unable to provide history for very large periods of time and therefore must be retrieved in batches).
 ```{r}
 getUrl <- function (date1, date2) {
   # Assemble proper url to retrieve weather data from webpage.
   # Arguments: date1, date2 are strings representing the start and end date in the format 'YYYY/mm/dd'
   # Returns: the customized url
-
+  
   URL <-
   paste(
   "https://www.wunderground.com/history/airport/KBOS/",
@@ -100,67 +97,65 @@ fetchWeather <- function(startDate, endDate) {
   # Retrieve weather data for a given date range from webpage.
   # Arguments: startDate, endDate are strings representing the start and end date in the format 'YYYY/mm/dd'
   # Returns: a data frame containing the date, temperature, humidity, wind, precipitation, and types of weather
-
-  webpage <-
-    RCurl::getURL(getUrl(startDate, endDate))
+  
+  webpage <- RCurl::getURL(getUrl(startDate, endDate))
   tc <- textConnection(webpage)
   webpage <- readLines(tc)
   close(tc)
-
+  
   pagetree <- htmlTreeParse(webpage, useInternalNodes = TRUE)
   weatherDate <-
   unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[1]/a", xmlValue))
-
+  
   weatherTempHi <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[2]/span",
   xmlValue
   ))
-
+  
   weatherTempLo <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[4]/span",
   xmlValue
   ))
-
+  
   weatherHumidity <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[9]/span",
   xmlValue
   ))
-
+  
   weatherWind <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[18]/span",
   xmlValue
   ))
-
+  
   weatherPrecip <-
   unlist(xpathApply(
   pagetree,
   "//*[@id='obsTable']/tbody/tr/td[20]/span",
   xmlValue
   ))
-
+  
   weatherType <-
   unlist(xpathApply(pagetree, "//*[@id='obsTable']/tbody/tr/td[21]", xmlValue))
-
-  # cleaning
-  weatherType <-
-  weatherType[grepl("\n", weatherType)] # remove empty strings
+  
+  # clean and parse through weatherType text
+  weatherType <- weatherType[grepl("\n", weatherType)] # remove empty strings
   weatherType <- gsub("\n", "", weatherType)
   weatherType <- gsub("\t", "", weatherType)
-
-  weatherType
+  ################## REMOVE THIS weatherType
+  
   weatherRain <- grepl("Rain", weatherType)
   weatherThunder <- grepl("Thunderstorm", weatherType)
   weatherFog <- grepl("Fog", weatherType)
   weatherSnow <- grepl("Snow", weatherType)
-
+  
   weatherFrame <-
   data.frame(
   weatherDate,
@@ -174,12 +169,14 @@ fetchWeather <- function(startDate, endDate) {
   weatherThunder,
   weatherFog,
   weatherSnow,
-  stringsAsFactors = FALSE)
-
+  stringsAsFactors = FALSE
+  )
+  
   weatherFrame[, 1:6] <- sapply(weatherFrame[, 1:6], as.numeric)
-
+  
   colnames(weatherFrame) <-
-  c("date",
+  c(
+  "date",
   "tempHi",
   "tempLo",
   "avgHumidity",
@@ -189,11 +186,15 @@ fetchWeather <- function(startDate, endDate) {
   "rain",
   "thunder",
   "fog",
-  "snow")
-
+  "snow"
+  )
+  
   return(weatherFrame)
 }
+```
 
+Retrieve weather from 2016-23-17 to 2017-12-02 and combine the two batches into one weather data frame.
+```{r}
 weather2016 <- fetchWeather("2016/06/23", "2017/06/22")
 weather2017 <- fetchWeather("2017/06/23", "2017/12/02")
 weatherTotal <- rbind(weather2016, weather2017)
@@ -206,7 +207,7 @@ data <- cbind(data, weatherTotal[,2:11])
 data
 ```
 
-Check for missing values. Only the precipitation column contains missing values.
+Checking for missing values, it is revealed that only the precipitation column contains missing values.
 ```{r}
 sapply(data[,1:14], function(x) length(x[which(is.na(x) == TRUE)]))
 ```
@@ -221,28 +222,25 @@ qplot(weatherTotal$precip,
 # distribution of non-zero precipitation amounts
 qplot(weatherTotal$precip[which(weatherTotal$precip>0)],
       geom="histogram")
+
+plot(data$precip, data$avgHumidity)
+plot(data$precip, data$avgWind)
 ```
 
 Partition data into training and validation sets.
 ```{r}
 set.seed(200)
 sampleRows <- sample.int(nrow(data), size = nrow(data)*.75)
-sampleRows
 
 trainingData <- data[sampleRows,]
 trainingData <- trainingData[complete.cases(trainingData),]
-trainingData
 
 validationData <- data[-sampleRows,]
 validationData <- validationData[complete.cases(validationData),]
-validationData
 ```
 
-Create regression model to impute missing precipitation data.
+Create a multiple regression model to impute missing precipitation data.
 ```{r}
-plot(data$precip, data$avgHumidity)
-plot(data$precip, data$avgWind)
-
 pred <- lm(precip ~
              week +
              tempHi +
@@ -257,6 +255,7 @@ pred <- lm(precip ~
              data = trainingData)
 summary(pred)
 ```
+
 Backfit the model to remove statistically insignificant variables.
 ```{r}
 pred <- lm(precip ~
@@ -286,8 +285,8 @@ pred <- lm(precip ~
 summary(pred)
 ```
 
-Determine accuracy of imputation model for precipitation to be 54.26%. 
-While the model is not statistically powerful with a low adjusted r-squared value .241, it serves the purpose of imputing missing precipation values.
+Determine the accuracy of the imputation model for precipitation to be 54.26%. 
+While the model does not have great predictive power with an adjusted r-squared value of .241, it has a strong, statistically significant p-value of 2.2e-16 and serves the purpose of imputing missing precipation values.
 ```{r}
 predAccuracy <- round(predict(pred, trainingData, type="response"))
 accuracy(predAccuracy, validationData$precip)
@@ -305,56 +304,56 @@ imputePrecip <- function(r) {
   return(round(max(precipPred, 0), 2))
 }
 
-isWeatherEvent <- function(x) {
+isWeatherEvent <- function(type) {
   # Determine if a particular date had a recorded weather event.
   # Arguments: string representing the 'type' field of the entry
   # Returns: true if the string matches any of the weather event types
   # Weather types  are hardcoded and this function should be abstracted to include all possible combinations more programmatically
   
   return(
-  x == "Rain" |
-  x == "Thunderstorm" |
-  x == "Fog" |
-  x == "Snow" |
-  x == "Fog,Rain" |
-  x == "Rain,Thunderstorm" |
-  x == "Fog,Rain,Thunderstorm" |
-  x == "Fog,Rain,Snow" |
-  x == "Fog,Snow" |
-  x == "Rain,Snow" |
-  x == "Rain,Snow,Thunderstorm"
+  type == "Rain" |
+  type == "Thunderstorm" |
+  type == "Fog" |
+  type == "Snow" |
+  type == "Fog,Rain" |
+  type == "Rain,Thunderstorm" |
+  type == "Fog,Rain,Thunderstorm" |
+  type == "Fog,Rain,Snow" |
+  type == "Fog,Snow" |
+  type == "Rain,Snow" |
+  type == "Rain,Snow,Thunderstorm"
   )
 }
 
 # for data points where no weather events were recorded, impute precipitation of 0.00 if precipitation is NA
 data[which(!isWeatherEvent(data$type)), ][is.na(data[which(!isWeatherEvent(data$type)), ]$precip), ]$precip <- 0.00
 
-# for data points where a weather event was recorded, impute precipitation
+# for remaining data points where a weather event was recorded and precipitation is NA, impute precipitation
 incompleteCases <- data[is.na(data$precip), ]
 imputedPrecip <- sapply(1:34, function(x) imputePrecip(incompleteCases[x, ])[[1]])
 data[is.na(data$precip), ]$precip <- imputedPrecip
 
-sapply(data[, 1:14], function(x)
-length(x[which(is.na(x) == TRUE)])) # confirm that there are no remaining missing values
+# confirm that there are no remaining missing values
+sapply(data[, 1:14], function(x) length(x[which(is.na(x) == TRUE)])) 
 data
 ```
 
 Detect outliers where stepCount is greater than or less than 3 standard deviations away from the mean.
 ```{r}
-dataWOutliers <- data # make a copy of the data before removing outliers
+dataWOutliers <-
+  data # make a copy of the data before removing outliers
 dataMean <- mean(data$stepCount) # 10165.07
 dataSd <- sd(data$stepCount) # 4223.689
 outliers <- data[which((data$stepCount > (dataMean + 3 * dataSd)) |
-(data$stepCount < (dataMean - 3 * dataSd))), ]
+                         (data$stepCount < (dataMean - 3 * dataSd))),]
 outliers
 ```
 
 Remove outliers.
 ```{r}
-data <-
-  data[-which((data$stepCount > (dataMean + 3 * dataSd)) |
-  (data$stepCount < (dataMean - 3 * dataSd))),]
-  data
+data <- data[-which((data$stepCount > (dataMean + 3 * dataSd)) |
+                      (data$stepCount < (dataMean - 3 * dataSd))), ]
+data
 ```
 
 After removing outliers, the data shows a bell curve revealing a more normal distribution.
@@ -364,47 +363,250 @@ qplot(data$stepCount,
       binwidth=500)
 ```
 
-
 Establish connection and insert data into mongodb collection.
 ```{r}
 db <- mongo(collection = "activityWeatherCol", db = "activityWeatherdb", url = "mongodb://localhost")
 # clear collection if already populated
-if(db$count > 0) {
+if(db$count() > 0) {
   db$drop()
 }
 db$insert(data)
 ```
 
-
-From the multiple regression model of stepCount by temperature there seems to be no strong correlation with an adjusted R-squared value of -.002 and p-value of .590.
+Query entire database for all entries. Visually explore data using a time series regression model.
 ```{r}
-stepsTempFrame <- db$find('{}', '{"stepCount":true, "tempHi":true, "tempLo":true, "_id":false}')
+stepsGeneralFrame <- db$find('{}', '{"type":false, "_id":false}')
+plot(stepsGeneralFrame$stepCount, xlab="days elapsed", ylab="stepCount")
+```
 
-set.seed(200)
-sampleRows <- sample.int(nrow(stepsTempFrame), size = nrow(stepsTempFrame)*.75)
-sampleRows
+MULTIPLE REGRESSION MODEL 1: STEPS BY WEEK
+Compare stepCount against (almost) all other independent variables to determine if there exist any correlations.
 
-trainingData <- stepsTempFrame[sampleRows,]
+According to the multiple regression model there seems to be no strong correlation with the given independent variables with an overall adjusted R-squared value of .05771 and p-value of .001242. The model is statistically significant but has little to no predictive power with an accuracy of 0%.
+```{r}
+set.seed(100)
+sampleRows <- sample.int(nrow(stepsGeneralFrame), size = nrow(stepsGeneralFrame)*.75)
+
+trainingData <- stepsGeneralFrame[sampleRows,]
 trainingData <- trainingData[complete.cases(trainingData),]
-trainingData
 
-validationData <- stepsTempFrame[-sampleRows,]
+validationData <- stepsGeneralFrame[-sampleRows,]
 validationData <- validationData[complete.cases(validationData),]
-validationData
 
 pred <- lm(stepCount ~
+             day +
+             week +
              tempHi +
-             tempLo,
+             tempLo +
+             avgHumidity +
+             avgWind +
+             precip +
+             rain +
+             thunder +
+             fog +
+             snow,
              data = trainingData)
 summary(pred)
 predAccuracy <- round(predict(pred, trainingData, type="response"))
 accuracy(predAccuracy, validationData$stepCount)
 ```
+After back-fitting the model by removing all statistically insigificant variables, there still does not appear to be a strong correlation when considering week of the year as the independent variables and step count as the dependent variable. The overall adjusted R-squared value of the model is .03576 and 9.953e-05, indicating an improvement over the previous .05771 and .001242 respectively. The model is more statistically significant but still has little to no predictive power with an accuracy of 0%.
+```{r}
+pred <- lm(stepCount ~
+             week,
+             data = trainingData)
+summary(pred)
+plot(pred)
+predAccuracy <- round(predict(pred, trainingData, type="response"))
+accuracy(predAccuracy, validationData$stepCount)
+```
+According to the pearson moment and spearman correlation for stepCount and week, there is little to no correlation.
+```{r}
+stepsAndWeek <-
+cbind(stepsGeneralFrame$stepCount, stepsGeneralFrame$week)
+
+stepsAndWeekPearson <-
+cor(stepsAndWeek, use = "pairwise.complete.obs", method = "pearson")
+paste("Pearson moment: ", stepsAndWeekPearson[1, 2])
+
+stepsAndWeekSpearman <-
+cor(stepsAndWeek, use = "pairwise.complete.obs", method = "spearman")
+paste("Spearman correlation: ", stepsAndWeekSpearman[1, 2])
+```
+
+The model does not fit the data, it has a mean squared error of 14076402.
+```{r}
+mse <- function(sm) mean(sm$residuals^2)
+mseStepsAndWeek <- mse(pred)
+mseStepsAndWeek
+```
 
 
+MULTIPLE REGRESSION MODEL 2: STEPS WHILE ON COOP BY WEEK AND PRECIPITATION
+
+From the multiple regression model of stepCount by week and precipitation there seems to be no strong correlation with an adjusted R-squared value of .09279  and p-value of .0007649. The model is statistically significant but still has little to no predictive power with an accuracy of 0%.
+```{r}
+stepsCoopFrame <- db$find('{"week": {"$gte":2, "$lte":26}}', '{"type":false, "_id":false}')
+stepsCoopFrame <- stepsCoopFrame[-c(1:8),]
+stepsCoopFrame
+
+set.seed(150)
+sampleRows <- sample.int(nrow(stepsCoopFrame), size = nrow(stepsCoopFrame)*.75)
+
+trainingData <- stepsCoopFrame[sampleRows,]
+trainingData <- trainingData[complete.cases(trainingData),]
+
+validationData <- stepsCoopFrame[-sampleRows,]
+validationData <- validationData[complete.cases(validationData),]
+
+pred <- lm(stepCount ~
+             week +
+             precip,
+             data = trainingData)
+summary(pred)
+plot(pred)
+
+predAccuracy <- round(predict(pred, trainingData, type="response"))
+accuracy(predAccuracy, validationData$stepCount)
+```
+
+According to the pearson moment and spearman correlation for stepCount and precipitation, there is little to no correlation.
+```{r}
+stepsAndPrecip <-
+  cbind(stepsCoopFrame$stepCount, stepsCoopFrame$precip)
+
+stepsAndPrecipPearson <-
+  cor(stepsAndPrecip, use = "pairwise.complete.obs", method = "pearson")
+paste("Pearson moment: ", stepsAndPrecipPearson[1, 2])
+
+stepsAndPrecipSpearman <-
+  cor(stepsAndPrecip, use = "pairwise.complete.obs", method = "spearman")
+paste("Spearman correlation: ", stepsAndPrecipSpearman[1, 2])
+```
+
+The model does not fit the data, it has a mean squared error of 11907208.
+```{r}
+mseStepsAndPrecip <- mse(pred)
+mseStepsAndPrecip
+```
+
+MULTIPLE REGRESSION MODEL 1: STEPS BY WEEK
+
+Calculate simple moving average to smooth the model and tune the model to find an appropriate smoothing order of 14.
+```{r}
+plot(ts(stepsGeneralFrame$stepCount), xlab="days elapsed", ylab="stepCount")
+
+stepCountGenSmooth1 <- SMA(stepsGeneralFrame$stepCount, n=3)
+plot(ts(stepCountGenSmooth1), xlab="days elapsed", ylab="stepCount")
+
+stepCountGenSmooth2 <- SMA(stepsGeneralFrame$stepCount, n=8)
+plot(ts(stepCountGenSmooth2), xlab="days elapsed", ylab="stepCount")
+
+stepCountGenSmooth3 <- SMA(stepsGeneralFrame$stepCount, n=14)
+plot(ts(stepCountGenSmooth3), xlab="days elapsed", ylab="stepCount")
+
+stepCountGenSmooth4 <- SMA(stepsGeneralFrame$stepCount, n=25)
+plot(ts(stepCountGenSmooth4), xlab="days elapsed", ylab="stepCount")
+```
+
+Compare the transformed data distributions.
+```{r}
+# remove the first 13 rows that were converted to NA
+qplot(stepsGeneralFrame$stepCount[14:length(stepCountGenSmooth3)],
+      geom="histogram",
+      binwidth=500)
+qplot(stepCountGenSmooth3[14:length(stepCountGenSmooth3)],
+      geom="histogram",
+      binwidth=500)
+```
+
+Create a new model with the transformed data. While the model is still weak, there is a slight improvement in both predictive power and statistical significance over the previous model with a new adjusted R-squared value of .1082 and p-value of 2.758e-11 compared to 0.03576 and 9.953e-05 respectively. The model is more statistically significant but still has little to no predictive power with an accuracy of 0%.
+```{r}
+stepsSmoothedFrame <- stepsGeneralFrame[-c(1:13),]
+stepsSmoothedFrame$stepCount <- stepCountGenSmooth3[14:length(stepCountGenSmooth3)]
+stepsSmoothedFrame
+
+set.seed(150)
+sampleRows <- sample.int(nrow(stepsSmoothedFrame), size = nrow(stepsSmoothedFrame)*.75)
+
+trainingData <- stepsSmoothedFrame[sampleRows,]
+trainingData <- trainingData[complete.cases(trainingData),]
+
+validationData <- stepsSmoothedFrame[-sampleRows,]
+validationData <- validationData[complete.cases(validationData),]
+
+pred <- lm(stepCount ~
+             week,
+             data = trainingData)
+summary(pred)
+plot(pred)
+
+predAccuracy <- round(predict(pred, trainingData, type="response"))
+accuracy(predAccuracy, validationData$stepCount)
+```
+
+After transforming the data, the pearson moment and spearman correlation reveal that the model of stepCount by week still has a weak correlation but has improved over the previous model before smoothing. The new pearson moment is now -0.341562287996567 up from -0.190223808419684 and the new spearman correlation is now -0.432126201947292 up from -0.140973149152474.
+```{r}
+stepsAndWeek <-
+cbind(stepsSmoothedFrame$stepCount, stepsSmoothedFrame$week)
+
+stepsAndWeekPearson2 <-
+cor(stepsAndWeek, use = "pairwise.complete.obs", method = "pearson")
+paste("Pearson moment: ", stepsAndWeekPearson2[1, 2])
+
+stepsAndWeekSpearman2 <-
+cor(stepsAndWeek, use = "pairwise.complete.obs", method = "spearman")
+paste("Spearman correlation: ", stepsAndWeekSpearman2[1, 2])
+```
+
+The model still does not fit the data, however, its mean squared error of 3539576 is an improvement over the pre-smoothing mse of  11907208.
+```{r}
+mseStepsAndWeek2 <- mse(pred)
+mseStepsAndWeek2
+```
+
+Calculate simple moving average to smooth the model and tune the model to find an appropriate smoothing order of 22.
+```{r}
+plot(ts(stepsCoopFrame$stepCount), xlab="days elapsed", ylab="stepCount")
+
+stepCountCoopSmooth1 <- SMA(stepsCoopFrame$stepCount, n=14)
+plot(ts(stepCountCoopSmooth1), xlab="days elapsed", ylab="stepCount")
+
+stepCountCoopSmooth2 <- SMA(stepsCoopFrame$stepCount, n=22)
+plot(ts(stepCountCoopSmooth2), xlab="days elapsed", ylab="stepCount")
+
+stepCountCoopSmooth3 <- SMA(stepsCoopFrame$stepCount, n=30)
+plot(ts(stepCountCoopSmooth3), xlab="days elapsed", ylab="stepCount")
+```
 
 
+Create a new model with the transformed data. While the model is still weak, there is a slight improvement in both predictive power and statistical significance over the previous model with a new adjusted R-squared value of 0.7719  and p-value of 2.2e-16 compared to .09279 and .0007649 respectively. The model is much more statistically significant but still has little to no predictive power with an accuracy of 0%.
+```{r}
+# remove the first 22 values which were converted to NA
+length(which(is.na(stepCountCoopSmooth2) == TRUE))
 
+stepsCoopSmoothedFrame <- stepsCoopFrame[-c(1:21),]
+stepsCoopSmoothedFrame$stepCount <- stepCountCoopSmooth2[22:length(stepCountCoopSmooth2)]
+stepsCoopSmoothedFrame
 
+set.seed(150)
+sampleRows <- sample.int(nrow(stepsCoopSmoothedFrame), size = nrow(stepsCoopSmoothedFrame)*.75)
+
+trainingData <- stepsCoopSmoothedFrame[sampleRows,]
+trainingData <- trainingData[complete.cases(trainingData),]
+
+validationData <- stepsCoopSmoothedFrame[-sampleRows,]
+validationData <- validationData[complete.cases(validationData),]
+
+pred <- lm(stepCount ~
+             week +
+             precip,
+             data = trainingData)
+summary(pred)
+plot(pred)
+
+predAccuracy <- round(predict(pred, trainingData, type="response"))
+accuracy(predAccuracy, validationData$stepCount)
+```
 
 
