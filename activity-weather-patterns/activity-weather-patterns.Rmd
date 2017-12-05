@@ -357,6 +357,52 @@ data <-
   data
 ```
 
+After removing outliers, the data shows a bell curve revealing a more normal distribution.
+```{r}
+qplot(data$stepCount,
+      geom="histogram",
+      binwidth=500)
+```
+
+
+Establish connection and insert data into mongodb collection.
+```{r}
+db <- mongo(collection = "activityWeatherCol", db = "activityWeatherdb", url = "mongodb://localhost")
+# clear collection if already populated
+if(db$count > 0) {
+  db$drop()
+}
+db$insert(data)
+```
+
+
+From the multiple regression model of stepCount by temperature there seems to be no strong correlation with an adjusted R-squared value of -.002 and p-value of .590.
+```{r}
+stepsTempFrame <- db$find('{}', '{"stepCount":true, "tempHi":true, "tempLo":true, "_id":false}')
+
+set.seed(200)
+sampleRows <- sample.int(nrow(stepsTempFrame), size = nrow(stepsTempFrame)*.75)
+sampleRows
+
+trainingData <- stepsTempFrame[sampleRows,]
+trainingData <- trainingData[complete.cases(trainingData),]
+trainingData
+
+validationData <- stepsTempFrame[-sampleRows,]
+validationData <- validationData[complete.cases(validationData),]
+validationData
+
+pred <- lm(stepCount ~
+             tempHi +
+             tempLo,
+             data = trainingData)
+summary(pred)
+predAccuracy <- round(predict(pred, trainingData, type="response"))
+accuracy(predAccuracy, validationData$stepCount)
+```
+
+
+
 
 
 
