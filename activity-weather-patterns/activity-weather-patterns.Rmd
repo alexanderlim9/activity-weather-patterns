@@ -296,12 +296,21 @@ accuracy(predAccuracy, validationData$precip)
 Impute missing precipitation value.
 ```{r}
 imputePrecip <- function(r) {
+  # Given a row containing missing precipitation data, impute the missing value.
+  # Arguments: row containing missing precip data
+  # Returns: the predicted precipitation value for the entry
+  
   precipPred <- (pred$coefficients[[1]] +
   (pred$coefficients[[2]] * r[7]) + (pred$coefficients[[3]] * r[8]))
   return(round(max(precipPred, 0), 2))
 }
 
-isWeatherEvent <- function(x) {# takes in a character for "type"
+isWeatherEvent <- function(x) {
+  # Determine if a particular date had a recorded weather event.
+  # Arguments: string representing the 'type' field of the entry
+  # Returns: true if the string matches any of the weather event types
+  # Weather types  are hardcoded and this function should be abstracted to include all possible combinations more programmatically
+  
   return(
   x == "Rain" |
   x == "Thunderstorm" |
@@ -318,17 +327,35 @@ isWeatherEvent <- function(x) {# takes in a character for "type"
 }
 
 # for data points where no weather events were recorded, impute precipitation of 0.00 if precipitation is NA
-data[which(!isWeatherEvent(data$type)),][is.na(data[which(!isWeatherEvent(data$type)),]$precip),]$precip <- 0.00
+data[which(!isWeatherEvent(data$type)), ][is.na(data[which(!isWeatherEvent(data$type)), ]$precip), ]$precip <- 0.00
 
 # for data points where a weather event was recorded, impute precipitation
-incompleteCases <- data[is.na(data$precip),] 
-imputedPrecip <- sapply(1:34, function(x) imputePrecip(incompleteCases[x,])[[1]])
-data[is.na(data$precip),]$precip <- imputedPrecip
+incompleteCases <- data[is.na(data$precip), ]
+imputedPrecip <- sapply(1:34, function(x) imputePrecip(incompleteCases[x, ])[[1]])
+data[is.na(data$precip), ]$precip <- imputedPrecip
 
-sapply(data[,1:14], function(x) length(x[which(is.na(x) == TRUE)])) # confirm that there are no remaining missing values
+sapply(data[, 1:14], function(x)
+length(x[which(is.na(x) == TRUE)])) # confirm that there are no remaining missing values
 data
 ```
 
+Detect outliers where stepCount is greater than or less than 3 standard deviations away from the mean.
+```{r}
+dataWOutliers <- data # make a copy of the data before removing outliers
+dataMean <- mean(data$stepCount) # 10165.07
+dataSd <- sd(data$stepCount) # 4223.689
+outliers <- data[which((data$stepCount > (dataMean + 3 * dataSd)) |
+(data$stepCount < (dataMean - 3 * dataSd))), ]
+outliers
+```
+
+Remove outliers.
+```{r}
+data <-
+  data[-which((data$stepCount > (dataMean + 3 * dataSd)) |
+  (data$stepCount < (dataMean - 3 * dataSd))),]
+  data
+```
 
 
 
