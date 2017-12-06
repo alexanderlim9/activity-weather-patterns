@@ -2,6 +2,10 @@
 title: "R Notebook"
 output: html_notebook
 ---
+Alexander Lim
+DS4100
+Trends in Activity & Weather Data
+
 Objective: Determine trends in activity patterns with respect to both weather and routine to predict and inform/improve future behavior.
 
 Install packages.
@@ -149,8 +153,7 @@ fetchWeather <- function(startDate, endDate) {
   weatherType <- weatherType[grepl("\n", weatherType)] # remove empty strings
   weatherType <- gsub("\n", "", weatherType)
   weatherType <- gsub("\t", "", weatherType)
-  ################## REMOVE THIS weatherType
-  
+
   weatherRain <- grepl("Rain", weatherType)
   weatherThunder <- grepl("Thunderstorm", weatherType)
   weatherFog <- grepl("Fog", weatherType)
@@ -382,7 +385,7 @@ plot(stepsGeneralFrame$stepCount, xlab="days elapsed", ylab="stepCount")
 MULTIPLE REGRESSION MODEL 1: STEPS BY WEEK
 Compare stepCount against (almost) all other independent variables to determine if there exist any correlations.
 
-According to the multiple regression model there seems to be no strong correlation with the given independent variables with an overall adjusted R-squared value of .05771 and p-value of .001242. The model is statistically significant but has little to no predictive power with an accuracy of 0%.
+According to the multiple regression model there seems to be no strong correlation with the given independent variables with an overall adjusted R-squared value of .05771 and p-value of .001242. The model has little to no predictive power with an accuracy of 0%.
 ```{r}
 set.seed(100)
 sampleRows <- sample.int(nrow(stepsGeneralFrame), size = nrow(stepsGeneralFrame)*.75)
@@ -410,7 +413,7 @@ summary(pred)
 predAccuracy <- round(predict(pred, trainingData, type="response"))
 accuracy(predAccuracy, validationData$stepCount)
 ```
-After back-fitting the model by removing all statistically insigificant variables, there still does not appear to be a strong correlation when considering week of the year as the independent variables and step count as the dependent variable. The overall adjusted R-squared value of the model is .03576 and 9.953e-05, indicating an improvement over the previous .05771 and .001242 respectively. The model is more statistically significant but still has little to no predictive power with an accuracy of 0%.
+After back-fitting the model by removing all statistically insigificant variables, there still does not appear to be a strong correlation when considering week of the year as the independent variables and step count as the dependent variable. The overall adjusted R-squared value of the model is .03576 and 9.953e-05, indicating an improvement over the previous .05771 and .001242 respectively. The model has little to no predictive power with an accuracy of 0%.
 ```{r}
 pred <- lm(stepCount ~
              week,
@@ -444,7 +447,7 @@ mseStepsAndWeek
 
 MULTIPLE REGRESSION MODEL 2: STEPS WHILE ON COOP BY WEEK AND PRECIPITATION
 
-From the multiple regression model of stepCount by week and precipitation there seems to be no strong correlation with an adjusted R-squared value of .09279  and p-value of .0007649. The model is statistically significant but still has little to no predictive power with an accuracy of 0%.
+From the multiple regression model of stepCount by week and precipitation there seems to be no strong correlation with an adjusted R-squared value of .09279  and p-value of .0007649. The model has little to no predictive power with an accuracy of 0%.
 ```{r}
 stepsCoopFrame <- db$find('{"week": {"$gte":2, "$lte":26}}', '{"type":false, "_id":false}')
 stepsCoopFrame <- stepsCoopFrame[-c(1:8),]
@@ -470,18 +473,31 @@ predAccuracy <- round(predict(pred, trainingData, type="response"))
 accuracy(predAccuracy, validationData$stepCount)
 ```
 
-According to the pearson moment and spearman correlation for stepCount and precipitation, there is little to no correlation.
+According to the pearson moment and spearman correlation for stepCount by week and precipitation on co-op, there is little to no correlation.
 ```{r}
+# week
+stepsAndWeek4 <-
+cbind(stepsCoopFrame$stepCount, stepsCoopFrame$week)
+
+stepsAndWeekPearson4 <-
+cor(stepsAndWeek4, use = "pairwise.complete.obs", method = "pearson")
+paste("Week Pearson moment: ", stepsAndWeekPearson4[1, 2])
+
+stepsAndWeekSpearman4 <-
+cor(stepsAndWeek4, use = "pairwise.complete.obs", method = "spearman")
+paste("Week Spearman correlation: ", stepsAndWeekSpearman4[1, 2])
+
+# precipitation
 stepsAndPrecip <-
   cbind(stepsCoopFrame$stepCount, stepsCoopFrame$precip)
 
 stepsAndPrecipPearson <-
   cor(stepsAndPrecip, use = "pairwise.complete.obs", method = "pearson")
-paste("Pearson moment: ", stepsAndPrecipPearson[1, 2])
+paste("Precip Pearson moment: ", stepsAndPrecipPearson[1, 2])
 
 stepsAndPrecipSpearman <-
   cor(stepsAndPrecip, use = "pairwise.complete.obs", method = "spearman")
-paste("Spearman correlation: ", stepsAndPrecipSpearman[1, 2])
+paste("Precip Spearman correlation: ", stepsAndPrecipSpearman[1, 2])
 ```
 
 The model does not fit the data, it has a mean squared error of 11907208.
@@ -490,7 +506,7 @@ mseStepsAndPrecip <- mse(pred)
 mseStepsAndPrecip
 ```
 
-MULTIPLE REGRESSION MODEL 1: STEPS BY WEEK
+ADJUSTED MULTIPLE REGRESSION MODEL 1: STEPS BY WEEK
 
 Calculate simple moving average to smooth the model and tune the model to find an appropriate smoothing order of 14.
 ```{r}
@@ -545,7 +561,7 @@ predAccuracy <- round(predict(pred, trainingData, type="response"))
 accuracy(predAccuracy, validationData$stepCount)
 ```
 
-After transforming the data, the pearson moment and spearman correlation reveal that the model of stepCount by week still has a weak correlation but has improved over the previous model before smoothing. The new pearson moment is now -0.341562287996567 up from -0.190223808419684 and the new spearman correlation is now -0.432126201947292 up from -0.140973149152474.
+After transforming the data, the pearson moment and spearman correlation reveal that the model of stepCount by week still has a weak correlation but has improved over the previous model before smoothing. The new pearson moment is now -0.341562287996567 up from -0.190223808419684, and the new spearman correlation is now -0.432126201947292 up from -0.140973149152474.
 ```{r}
 stepsAndWeek <-
 cbind(stepsSmoothedFrame$stepCount, stepsSmoothedFrame$week)
@@ -559,11 +575,13 @@ cor(stepsAndWeek, use = "pairwise.complete.obs", method = "spearman")
 paste("Spearman correlation: ", stepsAndWeekSpearman2[1, 2])
 ```
 
-The model still does not fit the data, however, its mean squared error of 3539576 is an improvement over the pre-smoothing mse of  11907208.
+The model still does not fit the data, however, its mean squared error of 3539576 is an improvement over the pre-smoothing mse of  14076402.
 ```{r}
 mseStepsAndWeek2 <- mse(pred)
 mseStepsAndWeek2
 ```
+
+ADJUSTED MULTIPLE REGRESSION MODEL 2: STEPS WHILE ON COOP BY WEEK AND PRECIPITATION
 
 Calculate simple moving average to smooth the model and tune the model to find an appropriate smoothing order of 22.
 ```{r}
@@ -609,4 +627,39 @@ predAccuracy <- round(predict(pred, trainingData, type="response"))
 accuracy(predAccuracy, validationData$stepCount)
 ```
 
+After smoothing, the pearson moment and spearman correlation reveal that the model of stepCount by week on co-op now has a moderate to strong correlation. The new pearson moment is now 0.87560474004223 up from 0.23573040878991, and the new spearman correlation is now 0.851887539359601 up from 0.227143913293732.
 
+Week by precipitation correlations had the following changes 
+Precip Pearson moment:  -0.190223808419684 -> 0.00829920921489339
+Precip Spearman correlation:  -0.140973149152474 -> 0.0999289618002939
+```{r}
+# week
+stepsAndWeek3 <-
+cbind(stepsCoopSmoothedFrame$stepCount, stepsCoopSmoothedFrame$week)
+
+stepsAndWeekPearson3 <-
+cor(stepsAndWeek3, use = "pairwise.complete.obs", method = "pearson")
+paste("Week Pearson moment2: ", stepsAndWeekPearson3[1, 2])
+
+stepsAndWeekSpearman3 <-
+cor(stepsAndWeek3, use = "pairwise.complete.obs", method = "spearman")
+paste("Week Spearman correlation2: ", stepsAndWeekSpearman3[1, 2])
+
+# precipitation
+stepsAndPrecip2 <-
+cbind(stepsCoopSmoothedFrame$stepCount, stepsCoopSmoothedFrame$precip)
+
+stepsAndPrecipPearson2 <-
+cor(stepsAndPrecip2, use = "pairwise.complete.obs", method = "pearson")
+paste("Precip Pearson moment2: ", stepsAndPrecipPearson2[1, 2])
+
+stepsAndPrecipSpearman2 <-
+cor(stepsAndPrecip2, use = "pairwise.complete.obs", method = "spearman")
+paste("Precip Spearman correlation2: ", stepsAndPrecipSpearman2[1, 2])
+```
+
+The model still does not fit the data, however, its mean squared error of 312025.1 is an improvement over the pre-smoothing mse of  11907208.
+```{r}
+mseStepsAndPrecip3 <- mse(pred)
+mseStepsAndPrecip3
+```
